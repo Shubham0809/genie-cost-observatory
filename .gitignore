@@ -1,0 +1,40 @@
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Dependencies and build outputs
+node_modules/
+client/dist/
+dist/
+build/
+coverage/
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+credentials.json
+secrets.json
+
+# Databricks bundle state and logs
+.databricks/
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test and editor artifacts
+.smoke-test/
+test-results/
+playwright-report/
+.idea/
+.vscode/
+*.iml
+
+# Auto-generated types (endpoint-specific, varies per developer)
+shared/appkit-types/serving.d.ts

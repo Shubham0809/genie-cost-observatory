@@ -1,0 +1,36 @@
+bundle:
+  name: genie-cost-observatory
+
+variables:
+  app_name:
+    description: Databricks App name
+    default: genie-cost-observatory
+  sql_warehouse_id:
+    description: SQL warehouse ID bound to the app as sql-warehouse
+
+resources:
+  apps:
+    app:
+      name: ${var.app_name}
+      description: Account-wide Genie cost observability with workspace and identity drill-down
+      source_code_path: ./
+
+      # Start the app automatically on deploy.
+      lifecycle:
+        started: true
+
+      resources:
+        - name: sql-warehouse
+          sql_warehouse:
+            id: ${var.sql_warehouse_id}
+            permission: CAN_USE
+
+targets:
+  # Host and credentials come from the selected Databricks CLI profile, not from this file.
+  default:
+    default: true
+
+  customer:
+    mode: production
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
