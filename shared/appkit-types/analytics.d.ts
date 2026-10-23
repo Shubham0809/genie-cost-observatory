@@ -5,6 +5,33 @@ import type { SQLTypeMarker, SQLStringMarker, SQLNumberMarker, SQLBooleanMarker,
 
 declare module "@databricks/appkit-ui/react" {
   interface QueryRegistry {
+    budget_scope_usage: {
+        name: "budget_scope_usage";
+        parameters: {
+          /** DATE - use sql.date() */
+          usage_month: SQLDateMarker;
+          /** STRING - use sql.string() */
+          workspace_ids: SQLStringMarker;
+          /** STRING - use sql.string() */
+          run_as_identity: SQLStringMarker;
+        };
+        result: Array<{
+          /** @sqlType STRING */
+          workspace_id: string;
+          /** The currency this price is expressed in */
+          currency_code: string;
+          /** @sqlType DOUBLE */
+          shared_estimated_list_cost: number;
+          /** @sqlType DOUBLE */
+          identity_estimated_list_cost: number;
+          /** @sqlType DOUBLE */
+          shared_unpriced_billed_dbus: number;
+          /** @sqlType DOUBLE */
+          identity_unpriced_billed_dbus: number;
+          /** @sqlType DATE */
+          latest_ingestion_date: string;
+        }>;
+      };
     identity_coverage: {
         name: "identity_coverage";
         parameters: {

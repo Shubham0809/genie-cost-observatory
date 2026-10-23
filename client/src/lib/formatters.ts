@@ -64,6 +64,20 @@ export function formatDate(value?: string | null): string {
   }).format(new Date(`${value}T00:00:00Z`));
 }
 
+export function formatDateTime(value?: string | null): string {
+  if (!value) {
+    return 'unknown time';
+  }
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  }).format(new Date(value));
+}
+
 export function formatMonth(value?: string | null): string {
   if (!value) {
     return 'Unknown month';

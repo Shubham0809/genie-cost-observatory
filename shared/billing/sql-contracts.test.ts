@@ -1,6 +1,15 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import {
+  ALL_WORKSPACES,
+  FREE_USAGE_SKU,
+  GENIE_AGENT_PRODUCT,
+  GENIE_AGENT_SURFACE,
+  GENIE_CODE_PRODUCT,
+  GENIE_CODE_SURFACE,
+  NONE_WORKSPACE,
+} from './constants';
 
 const queryDir = path.resolve(process.cwd(), 'config/queries');
 
@@ -25,7 +34,7 @@ describe('Genie billing SQL contracts', () => {
       }
 
       expect(sql, file).toContain("u.billing_origin_product = 'GENIE'");
-      expect(sql, file).toMatch(/:workspace_id|:search_term|:month_count/);
+      expect(sql, file).toMatch(/:workspace_id|:workspace_ids|:search_term|:month_count|:run_as_identity|:usage_month/);
       expect(sql, file).not.toMatch(/\$\{|`\$\{/);
     }
   });
@@ -42,18 +51,26 @@ describe('Genie billing SQL contracts', () => {
 
   it('filters Genie Agent and Genie Code surfaces and maps display names', () => {
     const queries = readQueries();
-    for (const file of ['overview.sql', 'identity_coverage.sql']) {
-      expect(queries[file]).toContain("u.usage_metadata.genie.surface IN ('GENIE_AGENTS', 'GENIE_CODE')");
+    for (const file of ['overview.sql', 'identity_coverage.sql', 'budget_scope_usage.sql']) {
+      expect(queries[file]).toContain(
+        `u.usage_metadata.genie.surface IN ('${GENIE_AGENT_SURFACE}', '${GENIE_CODE_SURFACE}')`
+      );
     }
-    expect(queries['overview.sql']).toContain("WHEN 'GENIE_AGENTS' THEN 'Genie Agent'");
-    expect(queries['overview.sql']).toContain("WHEN 'GENIE_CODE' THEN 'Genie Code'");
+    expect(queries['overview.sql']).toContain(`WHEN '${GENIE_AGENT_SURFACE}' THEN '${GENIE_AGENT_PRODUCT}'`);
+    expect(queries['overview.sql']).toContain(`WHEN '${GENIE_CODE_SURFACE}' THEN '${GENIE_CODE_PRODUCT}'`);
     expect(queries['overview.sql']).toContain('GROUPING SETS');
-    expect(queries['identity_coverage.sql']).toContain("WHEN 'GENIE_AGENTS' THEN 'Genie Agent'");
+    expect(queries['identity_coverage.sql']).toContain(`WHEN '${GENIE_AGENT_SURFACE}' THEN '${GENIE_AGENT_PRODUCT}'`);
   });
 
   it('joins list prices by SKU and effective window', () => {
     const queries = readQueries();
-    for (const file of ['overview.sql', 'workspace_ranking.sql', 'identity_coverage.sql', 'promotion_what_if.sql']) {
+    for (const file of [
+      'overview.sql',
+      'workspace_ranking.sql',
+      'identity_coverage.sql',
+      'promotion_what_if.sql',
+      'budget_scope_usage.sql',
+    ]) {
       expect(queries[file], file).toContain('u.sku_name = lp.sku_name');
       expect(queries[file], file).toContain('u.usage_end_time >= lp.price_start_time');
       expect(queries[file], file).toContain('lp.price_end_time IS NULL');
@@ -66,6 +83,12 @@ describe('Genie billing SQL contracts', () => {
     for (const file of ['overview.sql', 'workspace_ranking.sql', 'identity_coverage.sql']) {
       expect(queries[file], file).toMatch(/WHEN u\.sku_name = 'GENIE_FREE_USAGE' THEN 0\.0/);
     }
+    expect(queries['budget_scope_usage.sql']).toContain(`u.sku_name <> '${FREE_USAGE_SKU}'`);
+    expect(queries['budget_scope_usage.sql']).toContain(
+      `u.usage_metadata.genie.surface IN ('${GENIE_AGENT_SURFACE}', '${GENIE_CODE_SURFACE}')`
+    );
+    expect(queries['budget_scope_usage.sql']).toContain(`:workspace_ids = '${ALL_WORKSPACES}'`);
+    expect(queries['budget_scope_usage.sql']).toContain(`:workspace_ids <> '${NONE_WORKSPACE}'`);
   });
 
   it('keeps Genie Code allowance account-wide per identified user and month', () => {
@@ -84,7 +107,13 @@ describe('Genie billing SQL contracts', () => {
 
   it('does not join workspace metadata in billing queries so missing names cannot drop rows', () => {
     const queries = readQueries();
-    for (const file of ['overview.sql', 'workspace_ranking.sql', 'identity_coverage.sql', 'promotion_what_if.sql']) {
+    for (const file of [
+      'overview.sql',
+      'workspace_ranking.sql',
+      'identity_coverage.sql',
+      'promotion_what_if.sql',
+      'budget_scope_usage.sql',
+    ]) {
       expect(queries[file], file).not.toContain('system.access.workspaces_latest');
     }
   });

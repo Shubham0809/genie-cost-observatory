@@ -7,10 +7,11 @@ An AppKit React/TypeScript Databricks App for **account-wide** Genie cost observ
 The app is a Databricks AppKit application:
 
 - **Client:** React UI in `client/src`, using AppKit components and `useAnalyticsQuery`
-- **Server:** `server/server.ts` starts AppKit with the `analytics` and `server` plugins
+- **Server:** `server/server.ts` starts AppKit and exposes a read-only Account Budget API proxy
 - **Queries:** parameterized SQL in `config/queries`, executed as the **app service principal**
 - **Compute:** the SQL warehouse bound as `sql-warehouse` in `databricks.yml` / `app.yaml`
-- **Deployment:** Databricks Asset Bundles, with `app_name` and `sql_warehouse_id` variables
+- **Account Budget API:** `scripts/deploy.sh` looks up the account ID from `system.billing.usage` and the account host from the workspace URL, then injects them as bundle variables. Local development can set them in `.env`. `app.yaml` does not hardcode them.
+- **Deployment:** Databricks Asset Bundles, with app, warehouse, account ID, and account-host variables
 
 Viewers authenticated to the app see the same account-wide billing dataset the service principal can read. App `CAN_USE` does **not** create row-level isolation by viewer.
 
@@ -62,6 +63,19 @@ This section is labeled **Free-tier coverage and billed overage**.
 
 The Genie Code 150-DBU remaining allowance is calculated **per identified user, per calendar month, across the account**. Workspace identity rows still show that workspace’s DBUs and estimated list cost. Remaining Code allowance uses the identity’s account-wide `GENIE_FREE_USAGE` for Genie Code in the selected month, because billing records identify the user, not a workspace-local entitlement.
 
+## User budget controls
+
+Select **Check budgets** once per identity to see current Genie budget rules that cover that workspace and are visible to the app service principal. The app combines two sources:
+
+- The Account Budget API supplies Unity Gateway Genie budget scope, shared thresholds, per-user thresholds, overrides, and `BLOCK_USAGE` actions.
+- `system.billing.usage` supplies an estimated month-to-date paid list-cost comparison. After budgets load, the spend query runs only for all workspaces or for the selected workspace IDs on those budgets.
+
+The panel shows configuration fetch time, estimated spend through the latest billing ingestion date, and a warning when billing data is partial, lagged, or missing list prices.
+
+The panel distinguishes shared-pool controls from per-user controls. A shared `BLOCK_USAGE` rule **could block usage** for identities in its workspace scope. A per-user `BLOCK_USAGE` rule **could block usage** for one identity. The highest matching direct-user, service-principal, or group override replaces the default per-user threshold when identity lookup succeeds.
+
+Do not treat the panel as proof that a user is currently blocked. Budget enforcement is near real time. Displayed spend is estimated list cost from lagged `system.billing.usage`. The Databricks Budget service remains the enforcement source of truth.
+
 ## Promotion-removal simulation
 
 The Simulation tab estimates what identified-user Genie Agent promotional usage could cost if promotional credits were removed. It:
@@ -80,6 +94,7 @@ Never treat these figures as a final invoice.
 - Costs use billed DBUs and `pricing.effective_list.default`.
 - Results may differ from negotiated or invoiced amounts.
 - System billing data may lag recent activity.
+- Budget threshold consumption shown in the app is an estimate; enforcement is evaluated by the Budget service.
 - Promotion-removal values are estimates based on observed effective-list rates.
 
 ## Security
@@ -98,8 +113,11 @@ Grant the **app service principal**:
 - `SELECT` on `system.billing.usage`
 - `SELECT` on `system.billing.list_prices`
 - `USE SCHEMA` on `system.access` and `SELECT` on `system.access.workspaces_latest` **only if** workspace names should resolve
+- `roles/budget.viewer` on each Genie budget that should appear in the app (`scripts/deploy.sh` grants this during deploy)
 
 Do not grant account-admin, broad catalog, or unrelated privileges.
+
+Resolving direct-user and group budget overrides also requires read access to the relevant account identity records. If that lookup is not permitted, the app still shows shared and default per-user controls but labels the effective override as unresolved rather than guessing.
 
 Grant **app viewers** only app `CAN_USE` unless they must manage the app. Viewer access is separate from system-table access.
 
@@ -117,29 +135,16 @@ npm test
 npm run build
 ```
 
-Set `DATABRICKS_CONFIG_PROFILE` and `DATABRICKS_WAREHOUSE_ID` in `.env` (see `.env.example`) for local type generation. Do not commit `.env`.
+Set `DATABRICKS_CONFIG_PROFILE` and `DATABRICKS_WAREHOUSE_ID` in `.env` (see `.env.example`) for local development. Account ID and host are optional locally; `scripts/deploy.sh` injects them for customer deploys. Do not commit `.env`.
 
 In this development environment, Databricks CLI commands must use `--profile fevm-stable-oauth`.
 
 ## Customer deployment
 
-Customers do not edit source to deploy. Use a Databricks CLI profile for the destination workspace and pass bundle variables. Full steps, profile setup, grants, and troubleshooting are in [CUSTOMER_DEPLOYMENT.md](CUSTOMER_DEPLOYMENT.md).
+Customers do not edit source to deploy. Use a Databricks CLI profile for the destination workspace. `scripts/deploy.sh` resolves account ID/host, deploys the app, and grants warehouse `CAN_USE`, billing `SELECT`, and `roles/budget.viewer` on visible Unity Gateway Genie budgets. Full steps are in [CUSTOMER_DEPLOYMENT.md](CUSTOMER_DEPLOYMENT.md).
 
 ```bash
-databricks bundle validate --strict -t customer \
-  --profile <customer-profile> \
-  --var="app_name=genie-cost-observatory" \
-  --var="sql_warehouse_id=<warehouse-id>"
-
-databricks apps validate -t customer \
-  --profile <customer-profile> \
-  --var="app_name=genie-cost-observatory" \
-  --var="sql_warehouse_id=<warehouse-id>"
-
-databricks apps deploy -t customer \
-  --profile <customer-profile> \
-  --var="app_name=genie-cost-observatory" \
-  --var="sql_warehouse_id=<warehouse-id>"
+./scripts/deploy.sh --profile <customer-profile> --warehouse-id <warehouse-id> --target customer
 ```
 
-`databricks apps deploy` uploads, creates, and starts the app. `databricks bundle deploy` with the same `-t` / `--profile` / `--var` flags also starts this app because `lifecycle.started` is `true`.
+`databricks apps deploy` still works if you pass the bundle variables yourself. The deploy script is the supported customer path because it performs the lookup and grants.

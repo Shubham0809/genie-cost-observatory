@@ -7,6 +7,6 @@
     "noEmit": true,
     "rootDir": "./"
   },
-  "include": ["server/**/*", "shared/**/*", "config/**/*"],
-  "exclude": ["node_modules", "dist", "client", "shared/**/*.test.ts"]
+  "include": ["server/**/*", "shared/**/*", "config/**/*", "scripts/**/*.ts"],
+  "exclude": ["node_modules", "dist", "client", "shared/**/*.test.ts", "server/**/*.test.ts"]
 }

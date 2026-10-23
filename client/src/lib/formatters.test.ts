@@ -3,6 +3,7 @@ import {
   formatCurrency,
   formatCurrencyRate,
   formatDate,
+  formatDateTime,
   formatMonth,
   formatNumber,
   formatOptionalNumber,
@@ -27,6 +28,10 @@ describe('billing formatters', () => {
 
   it('formats billing ingestion dates in UTC', () => {
     expect(formatDate('2026-10-15')).toBe('Oct 15, 2026');
+  });
+
+  it('formats configuration timestamps in UTC', () => {
+    expect(formatDateTime('2026-10-23T10:15:00.000Z')).toBe('Oct 23, 2026, 10:15 AM');
   });
 
   it('formats calendar months without assuming a customer locale override', () => {

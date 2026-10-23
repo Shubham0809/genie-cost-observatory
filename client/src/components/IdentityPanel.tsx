@@ -49,6 +49,7 @@ import {
 } from '../../../shared/billing';
 import { formatCurrency, formatMonth, formatNumber, formatOptionalNumber, toNumber } from '../lib/formatters';
 import type { WorkspaceSelection } from '../types';
+import { BudgetImpactPanel } from './BudgetImpactPanel';
 
 interface IdentityPanelProps {
   selectedWorkspace: WorkspaceSelection | null;
@@ -63,6 +64,13 @@ type IdentitySortKey =
   | 'free_dbus'
   | 'billed_dbus'
   | 'current_estimated_cost';
+
+interface BudgetIdentitySelection {
+  name: string;
+  type: 'Identified user' | 'Service principal' | 'Unknown';
+  workspaceId: string;
+  usageMonth: string;
+}
 
 export function IdentityPanel({ selectedWorkspace, monthCount, onChooseWorkspace }: IdentityPanelProps) {
   return (
@@ -120,7 +128,7 @@ export function IdentityPanel({ selectedWorkspace, monthCount, onChooseWorkspace
           </EmptyContent>
         </Empty>
       ) : (
-        <IdentityTable selectedWorkspace={selectedWorkspace} monthCount={monthCount} />
+        <IdentityTable key={selectedWorkspace.id} selectedWorkspace={selectedWorkspace} monthCount={monthCount} />
       )}
     </div>
   );
@@ -137,6 +145,7 @@ function IdentityTable({
   const [page, setPage] = useState(0);
   const [sortKey, setSortKey] = useState<IdentitySortKey>('current_estimated_cost');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [budgetIdentity, setBudgetIdentity] = useState<BudgetIdentitySelection | null>(null);
   const monthOptions = useMemo(() => recentMonthStarts(parseMonthCount(monthCount)), [monthCount]);
   const [usageMonth, setUsageMonth] = useState(() => currentMonthStart());
   const safeMonth = parseMonthStart(usageMonth, currentMonthStart());
@@ -163,6 +172,17 @@ function IdentityTable({
   );
   const paged = useMemo(() => paginateRows(sorted, page, IDENTITY_PAGE_SIZE), [page, sorted]);
   const matchingRows = toNumber(identities.data?.[0]?.matching_identity_product_rows);
+  const activeBudgetIdentity =
+    budgetIdentity?.workspaceId === workspaceId && budgetIdentity.usageMonth === safeMonth ? budgetIdentity : null;
+  const budgetActionRows = useMemo(() => {
+    const firstIndexByIdentity = new Map<string, number>();
+    paged.rows.forEach((row, index) => {
+      if (!firstIndexByIdentity.has(row.run_as_identity)) {
+        firstIndexByIdentity.set(row.run_as_identity, index);
+      }
+    });
+    return firstIndexByIdentity;
+  }, [paged.rows]);
 
   function toggleSort(nextKey: IdentitySortKey) {
     if (sortKey === nextKey) {
@@ -189,6 +209,7 @@ function IdentityTable({
               value={safeMonth}
               onValueChange={(value) => {
                 setUsageMonth(value);
+                setBudgetIdentity(null);
                 setPage(0);
               }}
             >
@@ -246,6 +267,16 @@ function IdentityTable({
               <EmptyDescription>Try another month, identity search, or workspace.</EmptyDescription>
             </EmptyHeader>
           </Empty>
+        )}
+
+        {activeBudgetIdentity && (
+          <BudgetImpactPanel
+            key={`${workspaceId}-${safeMonth}-${activeBudgetIdentity.name}`}
+            identity={activeBudgetIdentity}
+            workspaceId={workspaceId}
+            usageMonth={safeMonth}
+            onClose={() => setBudgetIdentity(null)}
+          />
         )}
 
         {paged.rows.length > 0 && (
@@ -310,7 +341,7 @@ function IdentityTable({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paged.rows.map((identity) => (
+                  {paged.rows.map((identity, index) => (
                     <TableRow key={`${identity.run_as_identity}-${identity.product}`}>
                       <TableCell>
                         <p className="max-w-72 truncate font-medium" title={identity.run_as_identity}>
@@ -322,6 +353,23 @@ function IdentityTable({
                         >
                           {identity.identity_type}
                         </Badge>
+                        {budgetActionRows.get(identity.run_as_identity) === index && (
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="mt-1 h-auto px-0 text-xs"
+                            onClick={() =>
+                              setBudgetIdentity({
+                                name: identity.run_as_identity,
+                                type: budgetIdentityType(identity.identity_type),
+                                workspaceId,
+                                usageMonth: safeMonth,
+                              })
+                            }
+                          >
+                            Check budgets
+                          </Button>
+                        )}
                       </TableCell>
                       <TableCell className="font-medium">{identity.product}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatNumber(identity.total_dbus)}</TableCell>
@@ -375,6 +423,13 @@ function IdentityTable({
       </CardContent>
     </Card>
   );
+}
+
+function budgetIdentityType(value: string): BudgetIdentitySelection['type'] {
+  if (value === 'Identified user' || value === 'Service principal') {
+    return value;
+  }
+  return 'Unknown';
 }
 
 function SortableHead({

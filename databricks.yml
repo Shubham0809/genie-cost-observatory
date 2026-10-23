@@ -7,6 +7,10 @@ variables:
     default: genie-cost-observatory
   sql_warehouse_id:
     description: SQL warehouse ID bound to the app as sql-warehouse
+  databricks_account_id:
+    description: Databricks account ID used by the read-only Budget API. scripts/deploy.sh looks this up from system.billing.usage during deploy.
+  databricks_account_host:
+    description: Databricks account console host. scripts/deploy.sh derives this from the destination workspace URL during deploy.
 
 resources:
   apps:
@@ -18,6 +22,16 @@ resources:
       # Start the app automatically on deploy.
       lifecycle:
         started: true
+
+      config:
+        command: ['npm', 'run', 'start']
+        env:
+          - name: DATABRICKS_WAREHOUSE_ID
+            value_from: sql-warehouse
+          - name: DATABRICKS_ACCOUNT_ID
+            value: ${var.databricks_account_id}
+          - name: DATABRICKS_ACCOUNT_HOST
+            value: ${var.databricks_account_host}
 
       resources:
         - name: sql-warehouse
